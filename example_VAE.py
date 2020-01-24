@@ -12,13 +12,13 @@ from models import encoder_rgcn, decoder_adj
 from optimizers.vae import GraphVAEOptimizer
 
 dataset = 'chembl'
-batch_dim = 512
-la = 0.75
-dropout = 0.2
+batch_dim = 128
+la = 1.
+dropout = 0.1
 n_critic = 5
 metric = 'validity,qed'
 n_samples = 1000
-epochs = 50
+epochs = 25
 save_every = n_critic
 runname = 'vae-%s-%d' % (dataset, epochs)
 
@@ -183,8 +183,8 @@ model = GraphVAEModel(vertexes=data.vertexes,
                       edges=data.bond_num_types,
                       nodes=data.atom_num_types,
                       features=data.features,
-                      embedding_dim=16,
-                      encoder_units=((512, 256, 64), 512, (512, 256, 64)),
+                      embedding_dim=64,
+                      encoder_units=((256, 128), 256, (256, 128)),
                       decoder_units=(128, 256, 512),
                       encoder=encoder_rgcn,
                       decoder=decoder_adj,

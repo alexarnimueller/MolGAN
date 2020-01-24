@@ -7,14 +7,14 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem import Draw
 
-from molecular_metrics import MolecularMetrics
+from .molecular_metrics import MolecularMetrics
 
 
-def strip_salt(mols):
+def strip_salt(mols, stereo=False):
     out = list()
     for mol in mols:
         if mol:
-            s = Chem.MolToSmiles(mol, isomericSmiles=True)
+            s = Chem.MolToSmiles(mol, isomericSmiles=stereo)
             if '.' in s:
                 f = s.split('.')
                 lengths = [len(m) for m in f]

@@ -9,32 +9,30 @@ from models import encoder_rgcn, decoder_adj
 
 from optimizers.gan import GraphGANOptimizer
 
-runname = 'gan-test'
+dataset = 'chembl'  # 'gdb9_9nodes'
 batch_dim = 128
-la = 0.75
-dropout = 0
+la = 0.
+dropout = 0.1
 n_critic = 5
-metric = 'validity,sas'
+metric = 'validity,diversity'
 n_samples = 1000
-z_dim = 8
-epochs = 10
-save_every = None
-
+epochs = 500
+save_every = n_critic
+runname = 'gan-rl-valdiv-%s-%d' % (dataset, epochs)
 
 # load dataset
 data = SparseMolecularDataset()
-data.load('data/gdb9_9nodes.sparsedataset')
-
+data.load('data/%s.sparsedataset' % dataset)
 steps = (len(data) // batch_dim)
 
 
-def train_fetch_dict(i, steps, epoch, epochs, min_epochs, model, optimizer):
+def train_fetch_dict(i, steps, epoch, epochs, min_epochs, model, optimizer, la):
     a = [optimizer.train_step_G] if i % n_critic == 0 else [optimizer.train_step_D]
     b = [optimizer.train_step_V] if i % n_critic == 0 and la < 1 else []
     return a + b
 
 
-def train_feed_dict(i, steps, epoch, epochs, min_epochs, model, optimizer, batch_dim):
+def train_feed_dict(i, steps, epoch, epochs, min_epochs, model, optimizer, la, batch_dim):
     mols, _, _, a, x, _, _, _, _ = data.next_train_batch(batch_dim)
     embeddings = model.sample_z(batch_dim)
 
@@ -83,7 +81,7 @@ def eval_fetch_dict(i, epochs, min_epochs, model, optimizer):
             'la': optimizer.la}
 
 
-def eval_feed_dict(i, epochs, min_epochs, model, optimizer, batch_dim):
+def eval_feed_dict(i, epochs, min_epochs, model, optimizer, la, batch_dim):
     mols, _, _, a, x, _, _, _, _ = data.next_validation_batch()
     embeddings = model.sample_z(a.shape[0])
 
@@ -101,7 +99,8 @@ def eval_feed_dict(i, epochs, min_epochs, model, optimizer, batch_dim):
                  model.embeddings: embeddings,
                  model.rewardR: rewardR,
                  model.rewardF: rewardF,
-                 model.training: False}
+                 model.training: False,
+                 optimizer.la: la}
     return feed_dict
 
 
@@ -111,7 +110,7 @@ def test_fetch_dict(model, optimizer):
             'la': optimizer.la}
 
 
-def test_feed_dict(model, optimizer, batch_dim):
+def test_feed_dict(model, optimizer, la, batch_dim):
     mols, _, _, a, x, _, _, _, _ = data.next_test_batch()
     embeddings = model.sample_z(a.shape[0])
 
@@ -129,7 +128,8 @@ def test_feed_dict(model, optimizer, batch_dim):
                  model.embeddings: embeddings,
                  model.rewardR: rewardR,
                  model.rewardF: rewardF,
-                 model.training: False}
+                 model.training: False,
+                 optimizer.la: la}
     return feed_dict
 
 
@@ -161,29 +161,26 @@ def reward(mols):
     return rr.reshape(-1, 1)
 
 
-def _eval_update(i, epochs, min_epochs, model, optimizer, batch_dim, eval_batch):
-    mols = samples(data, model, session, model.sample_z(n_samples), sample=True)
-    m0, m1 = all_scores(mols, data, norm=True)
-    m0 = {k: np.array(v)[np.nonzero(v)].mean() for k, v in m0.items()}
-    m0.update(m1)
-    return m0
-
-
-def _test_update(model, optimizer, batch_dim, test_batch):
-    mols = samples(data, model, session, model.sample_z(n_samples), sample=True)
-    m0, m1 = all_scores(mols, data, norm=True)
-    m0 = {k: np.array(v)[np.nonzero(v)].mean() for k, v in m0.items()}
-    m0.update(m1)
-    return m0
+def _eval_test_update(model, mols=False):
+    if mols:
+        mols = samples(data, model, session, model.sample_z(n_samples), sample=True, smiles=True)
+        return strip_salt(mols)
+    else:
+        mols = samples(data, model, session, model.sample_z(n_samples), sample=True)
+        mols = strip_salt(mols)
+        m0, m1 = all_scores(mols, data, norm=True)
+        m0 = {k: np.array(v)[np.nonzero(v)].mean() for k, v in m0.items()}
+        m0.update(m1)
+        return m0
 
 
 # model
 model = GraphGANModel(vertexes=data.vertexes,
                       edges=data.bond_num_types,
                       nodes=data.atom_num_types,
-                      embedding_dim=z_dim,
+                      embedding_dim=32,
                       decoder_units=(128, 256, 512),
-                      discriminator_units=((128, 64), 128, (128, 64)),
+                      discriminator_units=((256, 128), 128, (256, 128)),
                       decoder=decoder_adj,
                       discriminator=encoder_rgcn,
                       soft_gumbel_softmax=False,
@@ -205,6 +202,7 @@ print('Parameters: {}'.format(np.sum([np.prod(e.shape) for e in session.run(tf.t
 trainer.train(batch_dim=batch_dim,
               epochs=epochs,
               steps=steps,
+              la=la,
               train_fetch_dict=train_fetch_dict,
               train_feed_dict=train_feed_dict,
               eval_fetch_dict=eval_fetch_dict,
@@ -212,5 +210,5 @@ trainer.train(batch_dim=batch_dim,
               test_fetch_dict=test_fetch_dict,
               test_feed_dict=test_feed_dict,
               save_every=save_every,
-              _eval_update=_eval_update,
-              _test_update=_test_update)
+              _eval_update=_eval_test_update,
+              _test_update=_eval_test_update)

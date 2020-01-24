@@ -86,7 +86,7 @@ class SparseMolecularDataset():
         self.smiles = np.array(self.smiles)
 
         # a (N, L) matrix where N is the length of the dataset and each L-dim vector contains the 
-        # indices corresponding to a SMILE sequences with padding wrt the max length of the longest 
+        # indices corresponding to a SMILES sequence with padding wrt the max length of the longest
         # SMILES sequence in the dataset (see self._genS)
         self.data_S = np.stack(self.data_S)
 
@@ -353,6 +353,6 @@ class SparseMolecularDataset():
 
 if __name__ == '__main__':
     data = SparseMolecularDataset()
-    data.generate('data/chembl.smi', validation=0.01, test=0.01, heavyatom=30,
-                  atoms=['C', 'N', 'O', 'S', 'H', 'F', 'Cl'])
+    data.generate('data/chembl.smi', validation=0.01, test=0.01, heavyatom=24,
+                  atoms=['C', 'N', 'O', 'S', 'H', 'Cl'])
     data.save('data/chembl.sparsedataset')
