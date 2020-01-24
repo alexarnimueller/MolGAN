@@ -5,8 +5,10 @@ from rdkit import Chem
 
 if __name__ == '__main__':
     from progress_bar import ProgressBar
+    from utils import strip_salt
 else:
     from utils.progress_bar import ProgressBar
+    from utils.utils import strip_salt
 
 from datetime import datetime
 
@@ -54,7 +56,7 @@ class SparseMolecularDataset():
         with open(filename, 'wb') as f:
             pickle.dump(self.__dict__, f)
 
-    def generate(self, filename, add_h=False, filters=lambda x: True, size=None, validation=0.1, test=0.1):
+    def generate(self, filename, add_h=False, heavyatom=9, atoms=None, size=None, validation=0.1, test=0.1):
         self.log('Extracting {}..'.format(filename))
 
         if filename.endswith('.sdf'):
@@ -63,20 +65,24 @@ class SparseMolecularDataset():
             self.data = [Chem.MolFromSmiles(line) for line in open(filename, 'r').readlines()]
 
         self.data = list(map(Chem.AddHs, self.data)) if add_h else self.data
-        self.data = list(filter(filters, self.data))
+        self.data = list(filter(lambda x: x.GetNumAtoms() <= heavyatom, self.data))
+
+        if atoms and isinstance(atoms, list):
+            self.match_atoms(atoms)
+            self.log('Filterd to molecules containing only %s' % atoms)
+
+        self.data = strip_salt(self.data)
         self.data = self.data[:size]
 
-        self.log('Extracted {} out of {} molecules {}adding Hydrogen!'.format(len(self.data),
-                                                                              len(Chem.SDMolSupplier(filename)),
-                                                                              '' if add_h else 'not '))
+        self.log('Extracted {} molecules {}adding Hydrogen!'.format(len(self.data), '' if add_h else 'not '))
 
         self._generate_encoders_decoders()
         self._generate_AX()
 
-        # it contains the all the molecules stored as rdkit.Chem objects
+        # it contains all the molecules stored as rdkit.Chem objects
         self.data = np.array(self.data)
 
-        # it contains the all the molecules stored as SMILES strings
+        # it contains all the molecules stored as SMILES strings
         self.smiles = np.array(self.smiles)
 
         # a (N, L) matrix where N is the length of the dataset and each L-dim vector contains the 
@@ -243,6 +249,9 @@ class SparseMolecularDataset():
 
         return np.vstack((features, np.zeros((max_length - features.shape[0], features.shape[1]))))
 
+    def match_atoms(self, atoms):
+        self.data = [mol for mol in self.data if set(map(lambda a: a.GetSymbol(), mol.GetAtoms())) <= set(atoms)]
+
     def matrices2mol(self, node_labels, edge_labels, strict=False):
         mol = Chem.RWMol()
 
@@ -344,9 +353,6 @@ class SparseMolecularDataset():
 
 if __name__ == '__main__':
     data = SparseMolecularDataset()
-    data.generate('data/gdb9.sdf', filters=lambda x: x.GetNumAtoms() <= 9)
-    data.save('data/gdb9_9nodes.sparsedataset')
-
-    # data = SparseMolecularDataset()
-    # data.generate('data/qm9_5k.smi', validation=0.00021, test=0.00021)  # , filters=lambda x: x.GetNumAtoms() <= 9)
-    # data.save('data/qm9_5k.sparsedataset')
+    data.generate('data/chembl.smi', validation=0.01, test=0.01, heavyatom=30,
+                  atoms=['C', 'N', 'O', 'S', 'H', 'F', 'Cl'])
+    data.save('data/chembl.sparsedataset')

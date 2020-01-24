@@ -7,7 +7,24 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem import Draw
 
-from utils.molecular_metrics import MolecularMetrics
+from molecular_metrics import MolecularMetrics
+
+
+def strip_salt(mols):
+    out = list()
+    for mol in mols:
+        if mol:
+            s = Chem.MolToSmiles(mol, isomericSmiles=True)
+            if '.' in s:
+                f = s.split('.')
+                lengths = [len(m) for m in f]
+                n = np.argmax(lengths)
+                out.append(f[n])
+            else:
+                out.append(s)
+        else:
+            out.append(None)
+    return [Chem.MolFromSmiles(mol) if mol else None for mol in out]
 
 
 def mols2grid_image(mols, molsPerRow):

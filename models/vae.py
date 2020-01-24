@@ -21,6 +21,7 @@ class GraphVAEModel:
         self.edges_labels = tf.placeholder(dtype=tf.int64, shape=(None, vertexes, vertexes))
         self.nodes_labels = tf.placeholder(dtype=tf.int64, shape=(None, vertexes))
         self.node_features = tf.placeholder(dtype=tf.float32, shape=(None, vertexes, features))
+        self.dropout_rate = tf.placeholder_with_default(0., shape=())
 
         self.rewardR = tf.placeholder(dtype=tf.float32, shape=(None, 1))
         self.rewardF = tf.placeholder(dtype=tf.float32, shape=(None, 1))
@@ -30,10 +31,10 @@ class GraphVAEModel:
         with tf.variable_scope('encoder'):
             outputs = self.encoder(
                 (self.adjacency_tensor, self.node_features if with_features else None, self.node_tensor),
-                units=encoder_units[:-1], training=self.training, dropout_rate=0.)
+                units=encoder_units[:-1], training=self.training, dropout_rate=self.dropout_rate)
 
             outputs = multi_dense_layers(outputs, units=encoder_units[-1], activation=tf.nn.tanh,
-                                         training=self.training, dropout_rate=0.)
+                                         training=self.training, dropout_rate=self.dropout_rate)
 
             self.embeddings_mean = tf.layers.dense(outputs, embedding_dim, activation=None)
             self.embeddings_std = tf.layers.dense(outputs, embedding_dim, activation=tf.nn.softplus)
@@ -43,7 +44,7 @@ class GraphVAEModel:
 
         with tf.variable_scope('decoder'):
             self.edges_logits, self.nodes_logits = self.decoder(self.embeddings, decoder_units, vertexes, edges, nodes,
-                                                                training=self.training, dropout_rate=0.)
+                                                                training=self.training, dropout_rate=self.dropout_rate)
 
         with tf.name_scope('outputs'):
             (self.edges_softmax, self.nodes_softmax), \
@@ -72,10 +73,10 @@ class GraphVAEModel:
 
     def V_x(self, inputs, units):
         with tf.variable_scope('value', reuse=tf.AUTO_REUSE):
-            outputs = self.encoder(inputs, units=units[:-1], training=self.training, dropout_rate=0.)
+            outputs = self.encoder(inputs, units=units[:-1], training=self.training, dropout_rate=self.dropout_rate)
 
             outputs = multi_dense_layers(outputs, units=units[-1], activation=tf.nn.tanh, training=self.training,
-                                         dropout_rate=0.)
+                                         dropout_rate=self.dropout_rate)
 
             outputs = tf.layers.dense(outputs, units=1, activation=tf.nn.sigmoid)
 

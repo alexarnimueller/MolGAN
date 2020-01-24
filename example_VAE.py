@@ -10,19 +10,20 @@ from models import encoder_rgcn, decoder_adj
 
 from optimizers.vae import GraphVAEOptimizer
 
-runname = 'vae-test-6'
-batch_dim = 128
+dataset = 'chembl'
+batch_dim = 512
 la = 0.75
-n_critic = 2
+dropout = 0.2
+n_critic = 5
 metric = 'validity,qed'
 n_samples = 1000
-z_dim = 8
-epochs = 6
+epochs = 50
 save_every = n_critic
+runname = 'vae-%s-%d' % (dataset, epochs)
 
 # load dataset
 data = SparseMolecularDataset()
-data.load('data/gdb9_9nodes.sparsedataset')
+data.load('data/%s.sparsedataset' % dataset)
 steps = (len(data) // batch_dim)
 
 
@@ -82,6 +83,7 @@ def train_feed_dict(i, steps, epoch, epochs, min_epochs, model, optimizer, la, b
                          model.rewardR: reward_r,
                          model.rewardF: reward_f,
                          model.training: True,
+                         model.dropout_rate: dropout,
                          optimizer.la: la if epoch > 0 else 1.0}
 
         else:
@@ -90,6 +92,7 @@ def train_feed_dict(i, steps, epoch, epochs, min_epochs, model, optimizer, la, b
                          model.node_features: f,
                          model.embeddings: embeddings,
                          model.training: True,
+                         model.dropout_rate: dropout,
                          optimizer.la: la if epoch > 0 else 1.0}
     else:
         feed_dict = {model.edges_labels: a,
@@ -97,6 +100,7 @@ def train_feed_dict(i, steps, epoch, epochs, min_epochs, model, optimizer, la, b
                      model.node_features: f,
                      model.embeddings: embeddings,
                      model.training: True,
+                     model.dropout_rate: dropout,
                      optimizer.la: 1.0}
 
     return feed_dict
@@ -162,9 +166,11 @@ def test_feed_dict(model, optimizer, la, batch_dim):
 
 def _eval_test_update(model, mols=False):
     if mols:
-        return samples(data, model, session, model.sample_z(n_samples), sample=True, smiles=True)
+        mols = samples(data, model, session, model.sample_z(n_samples), sample=True, smiles=True)
+        return strip_salt(mols)
     else:
         mols = samples(data, model, session, model.sample_z(n_samples), sample=True)
+        mols = strip_salt(mols)
         m0, m1 = all_scores(mols, data, norm=True)
         m0 = {k: np.array(v)[np.nonzero(v)].mean() for k, v in m0.items()}
         m0.update(m1)
@@ -176,8 +182,8 @@ model = GraphVAEModel(vertexes=data.vertexes,
                       edges=data.bond_num_types,
                       nodes=data.atom_num_types,
                       features=data.features,
-                      embedding_dim=z_dim,
-                      encoder_units=((128, 64), 128, (128, 64)),
+                      embedding_dim=16,
+                      encoder_units=((512, 256, 64), 512, (512, 256, 64)),
                       decoder_units=(128, 256, 512),
                       encoder=encoder_rgcn,
                       decoder=decoder_adj,
