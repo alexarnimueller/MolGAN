@@ -4,6 +4,7 @@ import tensorflow as tf
 from utils.sparse_molecular_dataset import SparseMolecularDataset
 from utils.trainer import Trainer
 from utils.utils import *
+from utils.molecular_metrics import MolecularMetrics
 
 from models.vae import GraphVAEModel
 from models import encoder_rgcn, decoder_adj
